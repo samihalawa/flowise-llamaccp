@@ -1,0 +1,55 @@
+services:
+  download_models:
+    image: aria2:latest
+    container_name: model_download
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    volumes:
+      - "./models:/models"
+
+  flowise:
+    image: flowiseai/flowise
+    container_name: flowise
+    restart: always
+
+    env_file:
+      - .env
+
+    ports:
+      - '${PORT}:${PORT}'
+    volumes:
+      - ./data:/root/.flowise
+    command: /bin/sh -c "sleep 3; flowise start"
+
+  llama:
+    depends_on:
+      download_models:
+        condition: service_completed_successfully
+
+    container_name: llama_python
+    image: llama.cpp:python
+    build:
+      context: llama/docker/cuda_simple
+      dockerfile: Dockerfile
+
+    environment:
+      - MODEL=/models/${MODEL_NAME}
+      - N_GPU_LAYERS=50
+      - N_CTX=16384
+      - USE_MLOCK=1
+
+    volumes:
+      - "./models:/models"
+
+    ports:
+      - "4096:8000"
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
